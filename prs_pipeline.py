@@ -8,18 +8,13 @@ import urllib.request
 
 PGS_URL_TEMPLATE = (
     "https://ftp.ebi.ac.uk/pub/databases/spot/pgs/scores/{pgs_id}/ScoringFiles/"
-    "{pgs_id}.txt.gz"
+    "Harmonized/{pgs_id}_hmPOS_GRCh37.txt.gz"
 )
 
 
 def download_pgs_file(pgs_id: str, target_dir: str) -> str:
     os.makedirs(target_dir, exist_ok=True)
-    target_path = os.path.join(target_dir, f"{pgs_id}.txt.gz")
-
-    local_fallback = os.path.abspath(os.path.join("..", "original_hg19", f"{pgs_id}.txt.gz"))
-    if os.path.exists(local_fallback):
-        print(f"Using local PGS file fallback: {local_fallback}")
-        return local_fallback
+    target_path = os.path.join(target_dir, f"{pgs_id}_hmPOS_GRCh37.txt.gz")
 
     if not os.path.exists(target_path):
         url = PGS_URL_TEMPLATE.format(pgs_id=pgs_id)
@@ -51,14 +46,14 @@ def build_score_file(pgs_path: str, score_path: str) -> int:
             parts = line.rstrip("\n").split("\t")
             if header is None:
                 header = parts
-                for name in ["chr_name", "chr_position", "effect_allele", "other_allele", "effect_weight"]:
+                for name in ["hm_chr", "hm_pos", "effect_allele", "other_allele", "effect_weight"]:
                     if name not in header:
                         raise RuntimeError(f"Missing required column '{name}' in PGS file")
                     columns[name] = header.index(name)
                 continue
 
-            chr_name = parts[columns["chr_name"]].strip()
-            chr_pos = parts[columns["chr_position"]].strip()
+            chr_name = parts[columns["hm_chr"]].strip()
+            chr_pos = parts[columns["hm_pos"]].strip()
             effect_allele = parts[columns["effect_allele"]].strip()
             other_allele = parts[columns["other_allele"]].strip()
             weight = parts[columns["effect_weight"]].strip()
@@ -77,7 +72,7 @@ def build_score_file(pgs_path: str, score_path: str) -> int:
                 continue
 
             allele1, allele2 = sorted([effect_allele, other_allele])
-            variant_id = f"{chr_name}:{chr_pos}:{allele1}:{allele2}"
+            variant_id = f"{chr_name}:{chr_pos}"
             key = (variant_id, effect_allele, weight)
             if key in seen:
                 continue
@@ -104,8 +99,8 @@ def run_plink(score_path: str, out_prefix: str, vcf_path: str = None, bfile_pref
             "--chr", "1-22",
             "--snps-only", "just-acgt",
             "--max-alleles", "2",
-            "--set-all-var-ids", "@:#:$1:$2",
-            "--var-id-multi", "@:#:$1:$2",
+            "--set-all-var-ids", "@:#",
+            "--var-id-multi", "@:#",
         ]
     else:
         expected_files = [f"{bfile_prefix}.bed", f"{bfile_prefix}.bim", f"{bfile_prefix}.fam"]
@@ -122,8 +117,8 @@ def run_plink(score_path: str, out_prefix: str, vcf_path: str = None, bfile_pref
                 "--bfile", bfile_prefix,
                 "--snps-only", "just-acgt",
                 "--max-alleles", "2",
-                "--set-all-var-ids", "@:#:$1:$2",
-                "--var-id-multi", "@:#:$1:$2",
+                "--set-all-var-ids", "@:#",
+                "--var-id-multi", "@:#",
                 "--make-pgen",
                 "--out", tmp_pfile_prefix,
             ]
