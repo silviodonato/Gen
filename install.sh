@@ -1,9 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Installing Python dependencies..."
-python3 -m pip install --upgrade pip
-python3 -m pip install -r requirements.txt
+VENV_DIR=".venv"
+
+if [ ! -d "$VENV_DIR" ]; then
+  echo "Creating Python virtual environment in $VENV_DIR..."
+  python3 -m venv "$VENV_DIR"
+fi
+
+echo "Activating virtual environment..."
+source "$VENV_DIR/bin/activate"
+
+echo "Upgrading pip and installing Python dependencies..."
+pip install --upgrade pip
+pip install -r requirements.txt
 
 if [ ! -x "./plink2" ]; then
   echo "Downloading plink2..."
@@ -12,4 +22,4 @@ if [ ! -x "./plink2" ]; then
   chmod +x plink2
 fi
 
-echo "Installation complete. plink2 is available in $(pwd)."
+echo "Installation complete. Use 'source $VENV_DIR/bin/activate' to activate the environment."

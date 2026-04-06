@@ -8,17 +8,30 @@ import urllib.request
 
 PGS_URL_TEMPLATE = (
     "https://ftp.ebi.ac.uk/pub/databases/spot/pgs/scores/{pgs_id}/ScoringFiles/"
-    "{pgs_id}_hmPOS_GRCh37.txt.gz"
+    "{pgs_id}.txt.gz"
 )
 
 
 def download_pgs_file(pgs_id: str, target_dir: str) -> str:
     os.makedirs(target_dir, exist_ok=True)
-    target_path = os.path.join(target_dir, f"{pgs_id}_hmPOS_GRCh37.txt.gz")
+    target_path = os.path.join(target_dir, f"{pgs_id}.txt.gz")
+
+    local_fallback = os.path.abspath(os.path.join("..", "original_hg19", f"{pgs_id}.txt.gz"))
+    if os.path.exists(local_fallback):
+        print(f"Using local PGS file fallback: {local_fallback}")
+        return local_fallback
+
     if not os.path.exists(target_path):
         url = PGS_URL_TEMPLATE.format(pgs_id=pgs_id)
         print(f"Downloading PGS file {pgs_id} from {url}...")
-        urllib.request.urlretrieve(url, target_path)
+        try:
+            urllib.request.urlretrieve(url, target_path)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                raise RuntimeError(
+                    f"PGS file not found at {url}. Check PGS ID or file availability."
+                )
+            raise
     return target_path
 
 
@@ -47,6 +60,7 @@ def build_score_file(pgs_path: str, score_path: str) -> int:
             chr_name = parts[columns["chr_name"]].strip()
             chr_pos = parts[columns["chr_position"]].strip()
             effect_allele = parts[columns["effect_allele"]].strip()
+            other_allele = parts[columns["other_allele"]].strip()
             weight = parts[columns["effect_weight"]].strip()
 
             if not chr_name or not chr_pos.isdigit():
@@ -55,14 +69,15 @@ def build_score_file(pgs_path: str, score_path: str) -> int:
                 chr_name = chr_name[3:]
             if chr_name not in {str(i) for i in range(1, 23)}:
                 continue
-            if len(effect_allele) != 1:
+            if len(effect_allele) != 1 or len(other_allele) != 1:
                 continue
             try:
                 float(weight)
             except ValueError:
                 continue
 
-            variant_id = f"{chr_name}:{chr_pos}"
+            allele1, allele2 = sorted([effect_allele, other_allele])
+            variant_id = f"{chr_name}:{chr_pos}:{allele1}:{allele2}"
             key = (variant_id, effect_allele, weight)
             if key in seen:
                 continue
@@ -82,11 +97,42 @@ def run_plink(score_path: str, out_prefix: str, vcf_path: str = None, bfile_pref
     if not vcf_path and not bfile_prefix:
         raise ValueError("Specify either --vcf or --bfile")
 
-    cmd = ["./plink2"]
     if vcf_path:
-        cmd += ["--vcf", vcf_path, "--chr", "1-22", "--set-all-var-ids", "@:#"]
+        cmd = [
+            "./plink2",
+            "--vcf", vcf_path,
+            "--chr", "1-22",
+            "--snps-only", "just-acgt",
+            "--max-alleles", "2",
+            "--set-all-var-ids", "@:#:$1:$2",
+            "--var-id-multi", "@:#:$1:$2",
+        ]
     else:
-        cmd += ["--bfile", bfile_prefix]
+        expected_files = [f"{bfile_prefix}.bed", f"{bfile_prefix}.bim", f"{bfile_prefix}.fam"]
+        missing = [f for f in expected_files if not os.path.exists(f)]
+        if missing:
+            raise FileNotFoundError(
+                f"PLINK binary prefix files not found for '{bfile_prefix}': {', '.join(missing)}"
+            )
+
+        tmp_pfile_prefix = os.path.join(os.path.dirname(out_prefix), os.path.basename(bfile_prefix) + ".chrid")
+        if not os.path.exists(f"{tmp_pfile_prefix}.pvar"):
+            plink_cmd = [
+                "./plink2",
+                "--bfile", bfile_prefix,
+                "--snps-only", "just-acgt",
+                "--max-alleles", "2",
+                "--set-all-var-ids", "@:#:$1:$2",
+                "--var-id-multi", "@:#:$1:$2",
+                "--make-pgen",
+                "--out", tmp_pfile_prefix,
+            ]
+            result = subprocess.run(plink_cmd, capture_output=True, text=True)
+            print(result.stdout)
+            if result.returncode != 0:
+                print(result.stderr, file=sys.stderr)
+                raise RuntimeError("PLINK2 conversion to PGEN failed")
+        cmd = ["./plink2", "--pfile", tmp_pfile_prefix]
 
     cmd += [
         "--score", score_path, "1", "2", "3", "header",
@@ -104,7 +150,7 @@ def run_plink(score_path: str, out_prefix: str, vcf_path: str = None, bfile_pref
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Compute PRS from a VCF or PLINK dataset using a PGS Catalog score file.")
-    parser.add_argument("--pgs-id", required=True, help="PGS Catalog ID, e.g. PGS002746")
+    parser.add_argument("--pgs-id", required=True, help="PGS Catalog ID, e.g. PGS003835")
     parser.add_argument("--work-dir", default="results", help="Working directory for output")
     parser.add_argument("--vcf", help="Input VCF or VCF.gz file")
     parser.add_argument("--bfile", help="Input PLINK binary prefix")
@@ -125,7 +171,10 @@ def main():
     kept = build_score_file(pgs_path, score_path)
     print(f"Score file created with {kept} variants")
 
-    base_name = args.bfile if args.bfile else os.path.splitext(os.path.basename(args.vcf))[0]
+    if args.bfile:
+        base_name = os.path.basename(args.bfile)
+    else:
+        base_name = os.path.splitext(os.path.basename(args.vcf))[0]
     out_prefix = os.path.join(args.work_dir, f"{base_name}.{args.pgs_id}")
     run_plink(score_path, out_prefix, vcf_path=args.vcf, bfile_prefix=args.bfile)
     print(f"PRS scoring complete. Output prefix: {out_prefix}")

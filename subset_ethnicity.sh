@@ -3,17 +3,18 @@ set -euo pipefail
 
 DATA_DIR="data"
 PANEL_FILE="$DATA_DIR/integrated_call_samples_v3.20130502.ALL.panel"
+PANEL_FILE_BASENAME="integrated_call_samples_v3.20130502.ALL.panel"
 
 mkdir -p "$DATA_DIR"
 cd "$DATA_DIR"
 
-if [ ! -f "$PANEL_FILE" ]; then
+if [ ! -f "$PANEL_FILE_BASENAME" ]; then
   echo "Downloading 1000G sample panel metadata..."
   wget -nc https://ftp.1000genomes.ebi.ac.uk/vol1/ftp/release/20130502/integrated_call_samples_v3.20130502.ALL.panel
 fi
 
-awk '$3 == "EUR" {print "0", $1}' "$PANEL_FILE" > lista_europei.txt
-awk '$2 == "TSI" {print "0", $1}' "$PANEL_FILE" > lista_toscani.txt
+awk '$3 == "EUR" {print "0", $1}' "$PANEL_FILE_BASENAME" > lista_europei.txt
+awk '$2 == "TSI" {print "0", $1}' "$PANEL_FILE_BASENAME" > lista_toscani.txt
 
 if [ ! -f 1000G_phase3_common_norel.bed ]; then
   echo "ERROR: 1000G PLINK files not found in $DATA_DIR"
