@@ -27,9 +27,20 @@ def main():
     args = parser.parse_args()
 
     values = read_sscore(args.reference_sscore)
+    values.sort()
+    n = len(values)
+    below = sum(1 for v in values if v < args.sample_value)
+    equal = sum(1 for v in values if v == args.sample_value)
+    percentile = (below + 0.5 * equal) / n * 100
+
     plt.figure(figsize=(10, 6))
     plt.hist(values, bins=80, density=True, color="#8da0cb", alpha=0.8, edgecolor="black")
-    plt.axvline(args.sample_value, color="#e41a1c", linewidth=3, label=f"{args.sample_label}: {args.sample_value:.6g}")
+    plt.axvline(
+        args.sample_value,
+        color="#e41a1c",
+        linewidth=3,
+        label=f"{args.sample_label}: {args.sample_value:.6g} ({percentile:.1f}th percentile)",
+    )
     plt.title("PRS distribution")
     plt.xlabel("PRS score")
     plt.ylabel("Density")
@@ -38,6 +49,7 @@ def main():
     plt.tight_layout()
     plt.savefig(args.output, dpi=200)
     print(f"Saved plot to {args.output}")
+    print(f"Sample PRS percentile: {percentile:.1f}% of reference samples are below or equal to this score.")
 
 
 if __name__ == "__main__":
