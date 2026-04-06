@@ -94,6 +94,8 @@ python3 plot_prs_distribution.py \
   --output results/1000G_EUR_HEIGHT/HEIGHT_EUR_distribution.png
 ```
 
+This script now also calculates the percentile of the sample score within the reference distribution and includes it in the plot legend and console output.
+
 ## 6. Notes
 
 - `PGS003835` is the adult height score used in this example.
