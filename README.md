@@ -31,7 +31,6 @@ This repository contains a complete workflow for:
 Run:
 
 ```bash
-cd prs-1000g-repo
 bash install.sh
 ```
 
@@ -48,7 +47,6 @@ source .venv/bin/activate
 Use the sample script with a VCF file:
 
 ```bash
-cd prs-1000g-repo
 bash run_height_prs.sh /path/to/sample.vcf.gz
 ```
 
@@ -59,7 +57,6 @@ The output will be written to `results/height/`.
 Run:
 
 ```bash
-cd prs-1000g-repo
 bash download_1000g.sh
 ```
 
@@ -72,7 +69,6 @@ This downloads the 1000G PLINK dataset archive into `data/` and extracts it.
 Create European (EUR) and Toscani (TSI) subsets:
 
 ```bash
-cd prs-1000g-repo
 bash subset_ethnicity.sh
 ```
 
@@ -86,7 +82,6 @@ This produces:
 Example: score the European subset for body height and plot it against the 1000G distribution.
 
 ```bash
-cd prs-1000g-repo
 python3 prs_pipeline.py \
   --pgs-id PGS003835 \
   --bfile data/1000G_EUR_hg19 \
